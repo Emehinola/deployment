@@ -1,288 +1,425 @@
-import 'dart:convert';
-import 'dart:math';
-import 'package:avon/screens/buy_plan_success.dart';
-import 'package:avon/screens/enrollee/dashboard/orders.dart';
-import 'package:avon/screens/payment/paystack_screen.dart';
-import 'package:avon/utils/services/general.dart';
-import 'package:avon/utils/services/notifications.dart';
-import 'package:avon/models/buy_plan.dart';
-import 'package:avon/screens/beneficiary/contact_details.dart';
-import 'package:avon/screens/webviews/flutterwave-payment.dart';
+import 'dart:io';
+import 'package:avon/models/plan.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:avon/screens/payment/payment_option.dart';
 import 'package:avon/state/main-provider.dart';
 import 'package:avon/utils/services/http-service.dart';
+import 'package:avon/utils/services/notifications.dart';
 import 'package:avon/utils/services/validation-service.dart';
-import 'package:avon/widgets/alert_dialog.dart';
+import 'package:avon/widgets/design/design_widget/header_progress.dart';
+import 'package:avon/widgets/forms/dropdown_input.dart';
 import 'package:avon/widgets/forms/text_button.dart';
-import 'package:avon/widgets/scaffolds.dart';
+import 'package:avon/widgets/forms/text_input.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:dotted_border/dotted_border.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
-import 'package:seerbit_flutter/new/customization.dart';
-import 'package:seerbit_flutter/new/methods.dart';
-import 'package:seerbit_flutter/new/payload.dart';
 
-
-enum PaymentMethod { FLUTTERWAVE, PAYSTACK }
-
-class PaymentOption extends StatefulWidget {
-  Map data;
-  PaymentOption({Key? key, required this.data}) : super(key: key);
+class PrincipalDetailsScreen extends StatefulWidget {
+  const PrincipalDetailsScreen({Key? key}) : super(key: key);
 
   @override
-  _PaymentOptionState createState() => _PaymentOptionState();
+  _PrincipalDetailsScreenState createState() => _PrincipalDetailsScreenState();
 }
 
-class _PaymentOptionState extends State<PaymentOption> {
-  PaymentMethod? _method;
+class _PrincipalDetailsScreenState extends State<PrincipalDetailsScreen> {
+  final _formKey = new GlobalKey<FormState>();
+
+  MainProvider? state;
+  File? _image;
   bool isLoading = false;
+  String? title;
+  String? gender;
+  String? maritalStatus;
+  TextEditingController _firstNameController = new TextEditingController();
+  TextEditingController _lastNameController = new TextEditingController();
+  TextEditingController _dobController = new TextEditingController();
+  TextEditingController _emailController = new TextEditingController();
+
+  int get progress => (state?.currentPlanIndex ?? 0) + 1;
+
+
+  @override
+  void initState() {
+    super.initState();
+
+    state = Provider.of<MainProvider>(context, listen: false);
+    _populate();
+  }
+
+  _populate(){
+    if(
+      !(state?.currentPlanData!['isSponsor'] ?? true)
+      && (state?.currentPlanData!['details'] == null)
+    ){
+      _firstNameController.text = "${state?.user.firstName}";
+      _lastNameController.text = "${state?.user.lastName}";
+      _emailController.text = "highdee.ai1@gmail.com";
+      title = "Mr";
+      gender = "Male";
+      maritalStatus = "Single";
+    }else if(state?.currentEnrolleData!['details'] != null){
+
+      Map data = state?.currentEnrolleData!['details'] ?? {};
+      _firstNameController.text = data['firstName'];
+      _lastNameController.text = data['surname'];
+      _dobController.text = data['dateOfBirth'];
+      _emailController.text = data['email'];
+      title = data['title'];
+      gender = data['gender'] == 'm'? "Male":"Female";
+      maritalStatus = data['maritalStatus'];
+      _image = File(data['image']);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AVScaffold(
-      decoration: BoxDecoration(color: Colors.white),
-      showAppBar: true,
-      title: "Payment Method",
-      child: WillPopScope(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Column(
-            children: [
-              Text(
-                "Pay for your plan through any of the platforms displayed below.",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w300,
+
+    return Scaffold(
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: MediaQuery.of(context).size.height * 0.05),
+          headerProgress(value: MediaQuery.of(context).size.width * (progress / (state?.allCartPlans.length ?? 1))),
+          SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GestureDetector(
+                      child: Icon(
+                        Icons.arrow_back,
+                        size: 30,
+                        color: Colors.black,
+                      ),
+                      onTap: (){
+                        Navigator.pop(context);
+                      },
+                    ),
+                    Text("Step $progress of ${state?.allCartPlans.length}",
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Colors.black
+                      ),)
+                  ],
+                ),
+                SizedBox(
+                  height: 10,
+                ),
+                Text(
+                    'Enter info',
+                    textAlign: TextAlign.start,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.black)
+                ),
+                SizedBox(height: 5,),
+                Text(
+                  "Enter the details of the plan beneficiary",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w300,
+
+                  ),
+                ),
+                SizedBox(height: 5,),
+                Divider(),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  children: [
+                    Text(
+                        'Principal’s details',
+                        textAlign: TextAlign.start,
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.black)
+                    ),
+                    SizedBox(height: 5,),
+                    Text(
+                      "Upload passport photo",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w300
+                      ),
+                    ),
+                    SizedBox(height: 10,),
+                    Visibility(
+                        visible: _image == null  ,
+                        child:Row(
+                          children: [
+                            DottedBorder(
+                              dashPattern: [8, 4],
+                              strokeWidth: 2,
+                              color: Color(0xff85369B).withOpacity(0.2),
+                              child: Container(
+                                height: 150,
+                                width: 150,
+                                color: Color(0xffE7D7EB),
+                                child: IconButton(
+                                  icon: Icon(Icons.add,
+                                      size: 50,
+                                      color: Color(0xff85369B).withOpacity(0.2)
+                                  ),
+                                  onPressed: (){
+                                    pickFile();
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        replacement:
+                        GestureDetector(
+                          child: Stack(
+                            children: [
+                              Image.file(
+                                File("${_image?.path}"),
+                                // height: MediaQuery.of(context).size.height * .2,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                              ),
+                              IconButton(
+                                  onPressed: (){
+                                    setState(() {
+                                      _image= null;
+                                    });
+                                  },
+                                  icon: CircleAvatar(
+                                    backgroundColor: Colors.black,
+                                    child: Icon(Icons.close, color: Colors.white),
+                                  )
+                              )
+                            ],
+                          ),
+                          onTap: pickFile,
+                        ),
+                    ),
+                    Padding(padding: EdgeInsets.only(top: 40)),
+                    AVDropdown(
+                        options: ["Mr", "Mrs", "Miss", "Dr", "Chief", "Sir", "Lady"],
+                        value: title,
+                        label: "Title",
+                        onChanged: (value){
+                          setState((){ title = value; });
+                        },
+                    ),
+                    SizedBox(height: 10),
+                    Column(
+                      children: [
+                        AVInputField(
+                          label: "Surname",
+                          labelText: "Ayomide ",
+                          controller: _lastNameController,
+                          validator: (String? v) => ValidationService.isValidString(v!, minLength: 2),
+                        ),
+                        SizedBox(height: 10),
+                        AVInputField(
+                          label: "First Name",
+                          labelText: "Ayomide ",
+                          controller: _firstNameController,
+                          validator: (String? v) => ValidationService.isValidString(v!, minLength: 2),
+                        ),
+                        if(state?.currentPlanData!['isSponsor'])
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: AVInputField(
+                            label: "Email",
+                            labelText: "email",
+                            controller: _emailController,
+                            validator: (String? v) => ValidationService.isValidEmail(v!),
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        AVDropdown(
+                          options: ["Male", "Female"],
+                          value: gender,
+                          label: "Gender",
+                          onChanged: (value){
+                            print(value);
+                            setState(() {
+                              gender = value;
+                            });
+                          },
+                        ),
+                        InkWell(
+                          onTap: toggleDatePicker,
+                          child: AVInputField(
+                            label: "Date of birth",
+                            labelText: "5/27/15",
+                            disabled: true,
+                            controller: _dobController,
+                            validator: (String? v) => ValidationService.isValidInput(v!, minLength: 5),
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        AVDropdown(
+                          options: ["Married", "Single", "Divorce"],
+                          value: maritalStatus,
+                          label: "Marital Status",
+                          onChanged: (value){
+                            print(value);
+                            setState(() {
+                              maritalStatus = value;
+                            });
+                          },
+                        )
+                      ],
+                    ),
+                    Container(
+                        width: MediaQuery.of(context).size.width,
+                        margin: EdgeInsets.symmetric(vertical: 20),
+                        child: AVTextButton(
+                            radius: 5,
+                            child: Text('Continue', style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16
+                            )),
+                            disabled: isLoading,
+                            showLoader: isLoading,
+                            verticalPadding: 17,
+                            callBack: submit
+                        ))
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              //paymentOpt(
-              //  image: "assets/images/image 878.png",
-              ////  title: "Pay with Flutterwave",
-              //  mthd:  PaymentMethod.FLUTTERWAVE,
-              // ),
-              paymentOpt(
-                  image: "assets/images/paystack.png",
-                  title: "Pay with Seerbit",
-                  mthd: PaymentMethod.PAYSTACK,
-                  scale: 14)
-            ],
-          ),
-        ),
-        onWillPop: () async {
-          return !isLoading;
-        },
+            ),
+          )
+        ],
       ),
-      bottomNavigationBar: Container(
-          width: MediaQuery.of(context).size.width,
-          height: 55,
-          padding: EdgeInsets.symmetric(horizontal: 20),
-          margin: EdgeInsets.only(bottom: 20),
-          child: AVTextButton(
-              radius: 5,
-              child: Text('Continue',
-                  style: TextStyle(color: Colors.white, fontSize: 16)),
-              verticalPadding: 17,
-              disabled: isLoading || _method == null,
-              showLoader: isLoading,
-              callBack: () {
-                _continue(context);
-              })),
     );
   }
 
-  Widget paymentOpt(
-          {required String image,
-          required String title,
-          required PaymentMethod mthd,
-          double scale = 1}) =>
-      InkWell(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          margin: const EdgeInsets.symmetric(vertical: 5),
-          child: Row(
-            children: [
-              Image.asset(
-                image,
-                scale: scale,
-              ),
-              SizedBox(
-                width: 15,
-              ),
-              Text(title,
-                  textAlign: TextAlign.start,
-                  style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black)),
-            ],
-          ),
-          decoration: BoxDecoration(
-              color: mthd == _method
-                  ? Color(0xff85369B).withOpacity(0.2)
-                  : Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(10)),
-        ),
-        onTap: () {
-          setState(() {
-            _method = mthd;
-          });
-        },
+  pickFile()async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+
+    if (result != null) {
+      File file = File(result.files.single.path!);
+      File? croppedFile = await ImageCropper().cropImage(
+          sourcePath: file.path,
+          aspectRatioPresets: [
+            CropAspectRatioPreset.square,
+            CropAspectRatioPreset.ratio3x2,
+            CropAspectRatioPreset.original,
+            CropAspectRatioPreset.ratio4x3,
+            CropAspectRatioPreset.ratio16x9
+          ],
+          androidUiSettings: AndroidUiSettings(
+              toolbarTitle: 'Cropper',
+              toolbarColor: Colors.deepOrange,
+              toolbarWidgetColor: Colors.white,
+              initAspectRatio: CropAspectRatioPreset.original,
+              lockAspectRatio: false),
+          iosUiSettings: IOSUiSettings(
+            // minimumAspectRatio: 1.0,
+          )
       );
 
-  _continue(BuildContext context) {
-    MainProvider state = Provider.of<MainProvider>(context, listen: false);
-
-    SeerbitMethod.startPayment(
-        context,
-        payload: PayloadModel(
-            currency: 'NGN',
-            email: state.user.email,
-            description: state.currentPlanData!['plan'].planTypeName,
-            fullName: "${state.user.firstName} ${state.user.lastName}",
-            country: "NG",
-            transRef: DateTime.now().toString(),
-            amount: widget.data['amount'].toString(),
-            callbackUrl: "your callback url",
-            publicKey: "SBTESTPUBK_N0y7tPQ3UzN8mJq47KchHINyQBjTwJBi",
-            closeOnSuccess: false,
-            closePrompt: false,
-            setAmountByCustomer: false,
-            pocketRef: "${widget.data['orderReference']}-${DateTime.now().second}",
-            vendorId: state.user.email,
-            customization: CustomizationModel(
-              borderColor: "#000000",
-              backgroundColor: "#631293",
-              buttonColor: "#631293",
-              paymentMethod: [PayChannel.card,PayChannel.account, PayChannel.transfer],
-              confetti: false,
-              logo: "logo_url || base64",
-            )
-        ),
-        onSuccess: (response) {
-          print(response);
-          if(response['message'] == "Successful"){
-            handleResponse(response);
-          }
-          Navigator.pop(context);
-        },
-        onCancel: (_) {}
-    );
-
-  }
-
-  _paystackPayment() {
-    MainProvider _state = Provider.of<MainProvider>(context, listen: false);
-    double _amount = widget.data['amount'];
-    Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (BuildContext context) => PayStackScreen(
-                  amount: _amount.toInt(),
-                  email: _state.user.email,
-                ))).then(handleResponse);
-  }
-  _flutterwavePayment() {
-    double _amount = widget.data['amount'];
-    MainProvider _state = Provider.of<MainProvider>(context, listen: false);
-
-    Map payload = {
-      'amount': _amount,
-      'email': 'ahighdee2@gmail.com', //_state.user.email,
-      'name': _state.user.firstName,
-      'phone': _state.user.mobilePhone,
-      'reference': widget.data['orderReference'],
-      'description': "Plan Purchase"
-    };
-    Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => FlutterWavePayment(data: payload)))
-        .then(handleResponse);
-  }
-
-  handleResponse(value) async {
-    if (value == null) return;
-
-    if (value['message'] == 'Successful') {
       setState(() {
-        isLoading = true;
-      });
-
-      MainProvider state = Provider.of<MainProvider>(context, listen: false);
-      List<BuyPlan> carts = state.cart;
-      carts = carts.map((e) {
-        e.paid = true;
-        return e;
-      }).toList();
-
-      state.cart = carts;
-      state.saveCart(carts);
-
-      Map data = widget.data;
-
-      BuyPlan plan = carts.first;
-      Map payload = {
-        "amount": state.getCartTotal().toString(),
-        "nhisAmount": '0',
-        "totalAmount": state.getCartTotal().toString(),
-        "productId": plan.selectedSubPlan?.code ?? '',
-        "paymentReference": value['payments']['gatewayref'],
-        "paymentMethod": "seerbit",
-        "orderReference": data['orderReference'],
-        "updatedBy": "${state.user.email}"
-      };
-
-      http.Response response = await HttpServices.post(
-          context, 'plans/suscribe/complete-payment', payload);
-      // print(response.body);
-
-      if (response.statusCode == 200) {
-        Map data = jsonDecode(response.body);
-        if (data['hasError'] == false) {
-          if (data['data']['enrolleeId'] != null) {
-            state.user.enrolleeId = data['data']['enrolleeId'];
-            GeneralService().setUser(state.user.toJson());
-          }
-
-          showAlertDialog(
-              context: context,
-              type: AlertType.SUCCESS,
-              header:
-                  "Bravo ${Provider.of<MainProvider>(context, listen: false).user.firstName}!",
-              body: "You have successfully completed your payment",
-              onContinue: () {});
-
-          if (!state.currentPlanData!['isSponsor']) {
-            Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => ContactDetailsScreen(data: data)));
-          } else {
-            if (state.isLastPlan) {
-              NotificationService.successSheet(context, data['message']);
-              Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (context) => BuyPlanSuccess()));
-            } else {
-              Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => OrderScreen(),
-                      settings: RouteSettings(name: "order-summary")));
-            }
-          }
-        }
-      }
-      setState(() {
-        isLoading = false;
+        _image = croppedFile;
       });
     } else {
-      showAlertDialog(
-          context: context,
-          type: AlertType.ERROR,
-          header:
-              "Sorry! ${Provider.of<MainProvider>(context, listen: false).user.firstName}!",
-          body: "Your payment wasn't successful");
+      // User canceled the picker
     }
   }
-}
 
+  toggleDatePicker()async {
+    DateTime? date = await showDatePicker(
+        context: context,
+        initialDate:DateTime(1995, 8),
+        firstDate: DateTime(1901, 1),
+        lastDate: DateTime.now().add(Duration(days: -(18 * 365)))
+    );
+    if(date?.day != null)
+      setState(() {
+        _dobController.text = "${date?.day}/${date?.month}/${date?.year}";
+      });
+    print(_dobController.text);
+  }
+
+  submit()async {
+    if(isLoading) return;
+    if(!_formKey.currentState!.validate()) return;
+
+    if(_image == null || title == null || gender == null){
+      NotificationService.errorSheet(context, "Please fill all required filled");
+      return;
+    }
+
+    MainProvider state = Provider.of<MainProvider>(context, listen: false);
+
+    if(state.currentPlanIndex == null) return;
+
+    setState(() { isLoading = true; });
+    Map? planData = state.allCartPlans[state.currentPlanIndex!];
+    Plan plan = planData['plan'];
+
+    Map payload = {
+      "firstName":_firstNameController.text,
+      "surname":_lastNameController.text,
+      "dateOfBirth":_dobController.text,
+      "title":title,
+      "gender":gender == 'Male' ? 'm':'f',
+      "maritalStatus":maritalStatus,
+      "CREATEDBY":"${state.user.email}",
+      "productId": plan.code,
+      "isSponsor": planData['isSponsor'] ? "1":"0"
+    };
+
+    if(planData['isSponsor']){
+      payload.addAll({
+        "email":_emailController.text
+      });
+    }else{
+      payload.addAll({
+        "email":state.user.email
+      });
+    }
+
+    print(payload);
+
+
+    var body = await HttpServices.multipartRequest(
+        url: "plans/suscribe/principal-detail${(state.currentPlanIndex == 0)? '':'/others'}",
+        payload: payload,
+        image: _image,
+        context: context);
+
+    print(body);
+    setState(() { isLoading = false; });
+    if(body['hasError']) return;
+
+
+    //caching the principal details of enrollee
+    state.cartData[state.currentPlanIndex!]['details'] = {
+      ...payload,
+      "image":_image?.path,
+      "orderId":body['data']['orderId'],
+      "orderReference":body['data']['orderReference'],
+    };
+
+    if(state.currentPlanIndex == 0){
+      Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (BuildContext context)=>
+              PaymentOption(data: {
+                "orderReference":body['data']['orderReference'],
+                "amount":state.getCartTotal() + state.nhisAmount,
+              }))
+      );
+    }else{
+      Navigator.popUntil(context, ModalRoute.withName("order-summary"));
+      NotificationService.successSheet(context, body['message']);
+    }
+
+  }
+}
