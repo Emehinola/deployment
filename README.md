@@ -1,517 +1,323 @@
-import 'dart:io';
-import 'package:avon/models/enrollee_plan.dart';
-import 'package:avon/models/plan.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'package:avon/screens/payment/payment_option.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:avon/screens/buy_plan_success.dart';
+import 'package:avon/screens/enrollee/dashboard/orders.dart';
+import 'package:avon/screens/payment/paystack_screen.dart';
+import 'package:avon/screens/welcome.dart';
+import 'package:avon/utils/services/general.dart';
+import 'package:avon/utils/services/notifications.dart';
+import 'package:avon/models/buy_plan.dart';
+import 'package:avon/screens/beneficiary/contact_details.dart';
+import 'package:avon/screens/webviews/flutterwave-payment.dart';
 import 'package:avon/state/main-provider.dart';
 import 'package:avon/utils/services/http-service.dart';
-import 'package:avon/utils/services/notifications.dart';
 import 'package:avon/utils/services/validation-service.dart';
-import 'package:avon/widgets/design/design_widget/header_progress.dart';
-import 'package:avon/widgets/forms/dropdown_input.dart';
+import 'package:avon/widgets/alert_dialog.dart';
 import 'package:avon/widgets/forms/text_button.dart';
-import 'package:avon/widgets/forms/text_input.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:dotted_border/dotted_border.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:avon/widgets/scaffolds.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:seerbit_flutter/new/customization.dart';
+import 'package:seerbit_flutter/new/methods.dart';
+import 'package:seerbit_flutter/new/payload.dart';
 
-class PrincipalDetailsScreen extends StatefulWidget {
-  const PrincipalDetailsScreen({Key? key}) : super(key: key);
+enum PaymentMethod { FLUTTERWAVE, PAYSTACK }
+
+class PaymentOption extends StatefulWidget {
+  Map data;
+  PaymentOption({Key? key, required this.data}) : super(key: key);
 
   @override
-  _PrincipalDetailsScreenState createState() => _PrincipalDetailsScreenState();
+  _PaymentOptionState createState() => _PaymentOptionState();
 }
 
-class _PrincipalDetailsScreenState extends State<PrincipalDetailsScreen> {
-  final _formKey = new GlobalKey<FormState>();
-  EnrolleePlan? enrolleePlan;
-  bool showSponsorDetails = false;
-
-  MainProvider? state;
-  File? _image;
+class _PaymentOptionState extends State<PaymentOption> {
+  PaymentMethod? _method;
   bool isLoading = false;
-  String? title;
-  String? gender;
-  String? maritalStatus;
-  TextEditingController _firstNameController = new TextEditingController();
-  TextEditingController _lastNameController = new TextEditingController();
-  TextEditingController _dobController = new TextEditingController();
-  TextEditingController _emailController = new TextEditingController();
-  TextEditingController _phoneController = new TextEditingController();
-  TextEditingController _sponsorEmailController = new TextEditingController();
-  TextEditingController _sponsorPhoneController = new TextEditingController();
-
-  static final DateTime now = DateTime.now();
-  static final DateFormat formatter = DateFormat('dd/MM/yyyy');
-  final String formattedDate = formatter.format(now);
-
-  int get progress => (state?.currentPlanIndex ?? 0) + 1;
-
-  @override
-  void initState() {
-    super.initState();
-
-    state = Provider.of<MainProvider>(context, listen: false);
-
-    _populate();
-  }
-
-  _populate() {
-    // if (!(state?.currentPlanData!['isSponsor'] ?? true) &&
-    //     (state?.currentPlanData!['details'] == null)) {
-    try {
-      if (!(state?.currentPlanData!['isSponsor'] ?? true)) {
-        Map data = state?.currentEnrolleData!['details'] ?? {};
-        print("fffff: $data");
-        _firstNameController.text = "${state?.user.firstName}";
-        _lastNameController.text = "${state?.user.lastName}";
-        _emailController.text = "${state?.user.email}";
-        title = "Mr";
-        gender = state?.plan!.gender == "MALE" ? "Male" : "Female";
-        maritalStatus = state?.plan!.maritalStatus ?? "Single";
-        _dobController.text =
-            "${formatter.format(DateTime.parse("${state?.plan?.dob}"))}";
-        _emailController.text = "${state?.user.email}";
-        _phoneController.text = "${state?.user.mobilePhone ?? ""}";
-      } else if (state?.currentEnrolleData!['details'] != null) {
-        Map data = state?.currentEnrolleData!['details'] ?? {};
-        print("gender: ${data['gender']}");
-        _firstNameController.text = data['firstName'];
-        _lastNameController.text = data['surname'];
-        _dobController.text = data['dateOfBirth'];
-        _emailController.text = data['email'];
-        title = data['title'];
-        gender = data['gender'] == 'm' ? "Male" : "Female";
-        maritalStatus = data['maritalStatus'];
-        _image = File(data['image']);
-        _emailController.text = "${state?.user.email}";
-        _phoneController.text = "${state?.user.mobilePhone ?? ""}";
-      }
-    } catch (e) {}
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: MediaQuery.of(context).size.height * 0.05),
-          headerProgress(
-              value: MediaQuery.of(context).size.width *
-                  (progress / (state?.allCartPlans.length ?? 1))),
-          SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    GestureDetector(
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 30,
-                        color: Colors.black,
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                    ),
-                    Text(
-                      "Step $progress of ${state?.allCartPlans.length}",
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                          color: Colors.black),
-                    )
-                  ],
-                ),
-                SizedBox(
-                  height: 10,
-                ),
-                Text('Enter info',
-                    textAlign: TextAlign.start,
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black)),
-                SizedBox(
-                  height: 5,
-                ),
-                Text(
-                  "Enter the details of the plan beneficiary",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w300,
-                  ),
-                ),
-                SizedBox(
-                  height: 5,
-                ),
-                Divider(),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: Form(
-                key: _formKey,
-                child: ListView(
-                  children: [
-                    Text('Principal’s details',
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black)),
-                    SizedBox(
-                      height: 5,
-                    ),
-                    Text(
-                      "Upload passport photo",
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w300),
-                    ),
-                    SizedBox(
-                      height: 10,
-                    ),
-                    Visibility(
-                      visible: _image == null,
-                      child: Row(
-                        children: [
-                          DottedBorder(
-                            dashPattern: [8, 4],
-                            strokeWidth: 2,
-                            color: Color(0xff85369B).withOpacity(0.2),
-                            child: Container(
-                              height: 150,
-                              width: 150,
-                              color: Color(0xffE7D7EB),
-                              child: IconButton(
-                                icon: Icon(Icons.add,
-                                    size: 50,
-                                    color: Color(0xff85369B).withOpacity(0.2)),
-                                onPressed: () {
-                                  pickFile();
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      replacement: GestureDetector(
-                        child: Stack(
-                          children: [
-                            Image.file(
-                              File("${_image?.path}"),
-                              // height: MediaQuery.of(context).size.height * .2,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            ),
-                            IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _image = null;
-                                  });
-                                },
-                                icon: CircleAvatar(
-                                  backgroundColor: Colors.black,
-                                  child: Icon(Icons.close, color: Colors.white),
-                                ))
-                          ],
-                        ),
-                        onTap: pickFile,
-                      ),
-                    ),
-                    Padding(padding: EdgeInsets.only(top: 40)),
-                    AVDropdown(
-                      options: [
-                        "Mr",
-                        "Mrs",
-                        "Miss",
-                        "Dr",
-                        "Chief",
-                        "Sir",
-                        "Lady"
-                      ],
-                      value: title,
-                      label: "Title",
-                      onChanged: (value) {
-                        setState(() {
-                          title = value;
-                        });
-                      },
-                    ),
-                    SizedBox(height: 10),
-                    Column(
-                      children: [
-                        AVInputField(
-                          label: "Surname",
-                          labelText: "Ayomide ",
-                          controller: _lastNameController,
-                          validator: (String? v) =>
-                              ValidationService.isValidString(v!, minLength: 2),
-                        ),
-                        SizedBox(height: 10),
-                        AVInputField(
-                          label: "First Name",
-                          labelText: "Ayomide ",
-                          controller: _firstNameController,
-                          validator: (String? v) =>
-                              ValidationService.isValidString(v!, minLength: 2),
-                        ),
-                        // if (state?.currentPlanData!['isSponsor'])
-                        if (!(state!.isLoggedIn) ||
-                            (state?.currentPlanData!['isSponsor']))
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: AVInputField(
-                              label: "Email",
-                              labelText: "email",
-                              controller: _emailController,
-                              validator: (String? v) =>
-                                  ValidationService.isValidEmail(v!),
-                            ),
-                          ),
-
-                        if (!(state!.isLoggedIn) ||
-                            (state?.currentPlanData!['isSponsor']))
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: AVInputField(
-                              label: "Phone Number",
-                              labelText: "+234",
-                              controller: _phoneController,
-                              validator: (String? v) =>
-                                  ValidationService.isValidPhoneNumber(v!),
-                            ),
-                          ),
-                        SizedBox(height: 10),
-                        if (!(state!.isLoggedIn) ||
-                            (state?.currentPlanData!['isSponsor']))
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: AVInputField(
-                              label: "Sponsor's Email",
-                              labelText: "",
-                              controller: _sponsorEmailController,
-                              validator: (String? v) =>
-                                  ValidationService.isValidEmail(v!),
-                            ),
-                          ),
-                        SizedBox(
-                          height: 10,
-                        ),
-                        if (!(state!.isLoggedIn) ||
-                            (state?.currentPlanData!['isSponsor']))
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: AVInputField(
-                              label: "Sponsor's Phone Number",
-                              labelText: "+234",
-                              controller: _sponsorPhoneController,
-                              validator: (String? v) =>
-                                  ValidationService.isValidPhoneNumber(v!),
-                            ),
-                          ),
-                        SizedBox(
-                          height: 10,
-                        ),
-                        AVDropdown(
-                          options: ["Male", "Female"],
-                          value: gender,
-                          label: "Gender",
-                          onChanged: (value) {
-                            print(value);
-                            setState(() {
-                              gender = value;
-                            });
-                          },
-                        ),
-                        InkWell(
-                          onTap: toggleDatePicker,
-                          child: AVInputField(
-                            label: "Date of birth",
-                            labelText: formattedDate,
-                            disabled: true,
-                            controller: _dobController,
-                            validator: (String? v) =>
-                                ValidationService.isValidInput(v!,
-                                    minLength: 5),
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        AVDropdown(
-                          options: ["Married", "Single", "Divorce"],
-                          value: maritalStatus,
-                          label: "Marital Status",
-                          onChanged: (value) {
-                            print(value);
-                            setState(() {
-                              maritalStatus = value;
-                            });
-                          },
-                        )
-                      ],
-                    ),
-                    Container(
-                        width: MediaQuery.of(context).size.width,
-                        margin: EdgeInsets.symmetric(vertical: 20),
-                        child: AVTextButton(
-                            radius: 5,
-                            child: Text('Continue',
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: 16)),
-                            disabled: isLoading,
-                            showLoader: isLoading,
-                            verticalPadding: 17,
-                            callBack: submit))
-                  ],
+    return AVScaffold(
+      decoration: BoxDecoration(color: Colors.white),
+      showAppBar: true,
+      title: "Payment Method",
+      child: WillPopScope(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          child: Column(
+            children: [
+              Text(
+                "Pay for your plan through any of the platforms displayed below.",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w300,
                 ),
               ),
-            ),
-          )
-        ],
+              const SizedBox(height: 10),
+              //paymentOpt(
+              //  image: "assets/images/image 878.png",
+              ////  title: "Pay with Flutterwave",
+              //  mthd:  PaymentMethod.FLUTTERWAVE,
+              // ),
+              paymentOpt(
+                  image: "assets/images/paystack.png",
+                  title: "Pay with Seerbit",
+                  mthd: PaymentMethod.PAYSTACK,
+                  scale: 14)
+            ],
+          ),
+        ),
+        onWillPop: () async {
+          return !isLoading;
+        },
       ),
+      bottomNavigationBar: Container(
+          width: MediaQuery.of(context).size.width,
+          height: 55,
+          padding: EdgeInsets.symmetric(horizontal: 20),
+          margin: EdgeInsets.only(bottom: 20),
+          child: AVTextButton(
+              radius: 5,
+              child: Text('Continue',
+                  style: TextStyle(color: Colors.white, fontSize: 16)),
+              verticalPadding: 17,
+              disabled: isLoading || _method == null,
+              showLoader: isLoading,
+              callBack: () {
+                _continue(context);
+              })),
     );
   }
 
-  pickFile() async {
-    FilePickerResult? result =
-        await FilePicker.platform.pickFiles(type: FileType.image);
+  Widget paymentOpt(
+          {required String image,
+          required String title,
+          required PaymentMethod mthd,
+          double scale = 1}) =>
+      InkWell(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          margin: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              Image.asset(
+                image,
+                scale: scale,
+              ),
+              SizedBox(
+                width: 15,
+              ),
+              Text(title,
+                  textAlign: TextAlign.start,
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black)),
+            ],
+          ),
+          decoration: BoxDecoration(
+              color: mthd == _method
+                  ? Color(0xff85369B).withOpacity(0.2)
+                  : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10)),
+        ),
+        onTap: () {
+          setState(() {
+            _method = mthd;
+          });
+        },
+      );
 
-    if (result != null) {
-      File file = File(result.files.single.path!);
-      File? croppedFile = await ImageCropper().cropImage(
-          sourcePath: file.path,
-          aspectRatioPresets: [
-            CropAspectRatioPreset.square,
-            CropAspectRatioPreset.ratio3x2,
-            CropAspectRatioPreset.original,
-            CropAspectRatioPreset.ratio4x3,
-            CropAspectRatioPreset.ratio16x9
-          ],
-          androidUiSettings: AndroidUiSettings(
-              toolbarTitle: 'Cropper',
-              toolbarColor: Colors.deepOrange,
-              toolbarWidgetColor: Colors.white,
-              initAspectRatio: CropAspectRatioPreset.original,
-              lockAspectRatio: false),
-          iosUiSettings: IOSUiSettings(
-              // minimumAspectRatio: 1.0,
-              ));
-
-      setState(() {
-        _image = croppedFile;
-      });
-    } else {
-      // User canceled the picker
-    }
-  }
-
-  toggleDatePicker() async {
-    // print("date: ${int.parse(formattedDate.split('-')[0])}");
-    DateTime? date = await showDatePicker(
-        context: context,
-        initialDate: DateTime.now(),
-        firstDate: DateTime(1901, 1),
-        lastDate: DateTime.now());
-    // lastDate: DateTime(int.parse(formattedDate.split('-')[0]), 8));
-    // lastDate: DateTime.now().add(Duration(days: -(18 * 365))));
-    if (date?.day != null)
-      setState(() {
-        _dobController.text = "${date?.day}/${date?.month}/${date?.year}";
-      });
-    print(_dobController.text);
-  }
-
-  submit() async {
-    if (isLoading) return;
-    if (!_formKey.currentState!.validate()) return;
-
-    if (_image == null || title == null || gender == null) {
-      NotificationService.errorSheet(
-          context, "Please fill all required fields");
-      return;
-    }
-
+  _continue(BuildContext context) {
     MainProvider state = Provider.of<MainProvider>(context, listen: false);
 
-    if (state.currentPlanIndex == null) return;
+    SeerbitMethod.startPayment(context,
+        payload: PayloadModel(
+            currency: 'NGN',
+            email: !state.isLoggedIn ? widget.data['email'] : state.user.email,
+            description: state.currentPlanData!['plan'].planTypeName,
+            fullName:
+                "${!state.isLoggedIn ? widget.data['firstName'] : state.user.firstName} ${!state.isLoggedIn ? widget.data['lastName'] : state.user.lastName}",
+            country: "NG",
+            transRef: DateTime.now().toString(),
+            amount: widget.data['amount'].toString(),
+            callbackUrl: "your callback url",
+            publicKey: "SBTESTPUBK_N0y7tPQ3UzN8mJq47KchHINyQBjTwJBi",
+            closeOnSuccess: false,
+            closePrompt: false,
+            setAmountByCustomer: false,
+            pocketRef:
+                "${widget.data['orderReference']}-${DateTime.now().second}",
+            vendorId:
+                !state.isLoggedIn ? widget.data['email'] : state.user.email,
+            customization: CustomizationModel(
+              borderColor: "#000000",
+              backgroundColor: "#631293",
+              buttonColor: "#631293",
+              paymentMethod: [
+                PayChannel.card,
+                PayChannel.account,
+                PayChannel.transfer
+              ],
+              confetti: false,
+              logo: "logo_url || base64",
+            )), onSuccess: (response) {
+      print(response);
+      if (response['message'] == "Successful") {
+        handleResponse(response);
+      }
+      Navigator.pop(context);
+    }, onCancel: (_) {});
+  }
 
-    setState(() {
-      isLoading = true;
-    });
-    Map? planData = state.allCartPlans[state.currentPlanIndex!];
-    Plan plan = planData['plan'];
+  _paystackPayment() {
+    MainProvider _state = Provider.of<MainProvider>(context, listen: false);
+    double _amount = widget.data['amount'];
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (BuildContext context) => PayStackScreen(
+                  amount: _amount.toInt(),
+                  email: !_state.isLoggedIn
+                      ? widget.data['email']
+                      : _state.user.email,
+                ))).then(handleResponse);
+  }
+
+  _flutterwavePayment() {
+    double _amount = widget.data['amount'];
+    MainProvider _state = Provider.of<MainProvider>(context, listen: false);
 
     Map payload = {
-      "firstName": _firstNameController.text,
-      "surname": _lastNameController.text,
-      "dateOfBirth": _dobController.text,
-      "title": title,
-      "gender": gender == 'Male' ? 'm' : 'f',
-      "maritalStatus": maritalStatus,
-      "CREATEDBY":
-          "${state.isLoggedIn ? state.user.email : _emailController.text.toString()}",
-      "productId": plan.code,
-      "isSponsor": planData['isSponsor'] ? "1" : "0",
-      "PHONENUMBER": _phoneController.text.isNotEmpty
-          ? _phoneController.text.toString()
-          : ""
+      'amount': _amount,
+      'email': _state.user.email, // 'ahighdee2@gmail.com',,
+      'name': _state.user.firstName,
+      'phone': _state.user.mobilePhone,
+      'reference': widget.data['orderReference'],
+      'description': "Plan Purchase"
     };
+    Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => FlutterWavePayment(data: payload)))
+        .then(handleResponse);
+  }
 
-    if (planData['isSponsor'] || !state.isLoggedIn) {
-      payload.addAll({"email": _emailController.text});
+  handleResponse(value) async {
+    if (value == null) return;
+
+    if (value['message'] == 'Successful') {
+      setState(() {
+        isLoading = true;
+      });
+
+      MainProvider state = Provider.of<MainProvider>(context, listen: false);
+      List<BuyPlan> carts = state.cart;
+      carts = carts.map((e) {
+        e.paid = true;
+        return e;
+      }).toList();
+
+      state.cart = carts;
+      state.saveCart(carts);
+
+      Map data = widget.data;
+
+      BuyPlan plan = carts.first;
+      Map payload = {
+        "amount": state.getCartTotal().toString(),
+        "nhisAmount": '0',
+        "totalAmount": state.getCartTotal().toString(),
+        "productId": plan.selectedSubPlan?.code ?? '',
+        "paymentReference": value['payments']['gatewayref'],
+        "paymentMethod": "seerbit",
+        "orderReference": data['orderReference'],
+        "updatedBy": "${!state.isLoggedIn ? data['email'] : state.user.email}"
+      };
+      GeneralService()
+          .setStringPref('getPaymentUserFirstName', data['firstName']);
+      http.Response response = await HttpServices.post(
+          context, 'plans/suscribe/complete-payment', payload);
+      print("payment response: ${response.body}");
+
+      if (response.statusCode == 200) {
+        Map data = jsonDecode(response.body);
+        if (data['hasError'] == false) {
+          try {
+            if (data['data']['enrolleeId'] != null) {
+              state.user.enrolleeId = data['data']['enrolleeId'];
+              GeneralService().setUser(state.user.toJson());
+            }
+          } catch (e) {}
+          String paymentUser = "";
+
+          if (!state.isLoggedIn) {
+            GeneralService()
+                .getStringPref('getPaymentUserFirstName')
+                .then((value) {
+              paymentUser = value.toString();
+            });
+            showAlertDialog(
+                context: context,
+                type: AlertType.SUCCESS,
+                navigateTo: 'welcome',
+                header:
+                    "Bravo ${!state.isLoggedIn ? paymentUser : Provider.of<MainProvider>(context, listen: false).user.firstName}!",
+                body: "You have successfully completed your payment",
+                onContinue: () {});
+          } else {
+            showAlertDialog(
+                context: context,
+                type: AlertType.SUCCESS,
+                header:
+                    "Bravo ${!state.isLoggedIn ? widget.data['firstName'] : Provider.of<MainProvider>(context, listen: false).user.firstName}!",
+                body: "You have successfully completed your payment",
+                onContinue: () {});
+          }
+          if (!state.isLoggedIn) {
+            Navigator.pushReplacement(context,
+                MaterialPageRoute(builder: (context) => WelcomeScreen()));
+          }
+          if (!state.currentPlanData!['isSponsor']) {
+            if (state.isLoggedIn) {
+              Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => ContactDetailsScreen(data: data)));
+            } else {
+              Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => BuyPlanSuccess(
+                            firstName: data['firstName'],
+                          )));
+            }
+          } else {
+            if (state.isLastPlan) {
+              NotificationService.successSheet(context, data['message']);
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (context) => BuyPlanSuccess()));
+            } else {
+              Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => OrderScreen(),
+                      settings: RouteSettings(name: "order-summary")));
+            }
+          }
+        }
+      }
+      setState(() {
+        isLoading = false;
+      });
     } else {
-      payload.addAll({"email": state.user.email});
-    }
-
-    print(payload);
-
-    var body = await HttpServices.multipartRequest(
-        url:
-            "plans/suscribe/principal-detail${(state.currentPlanIndex == 0) ? '' : '/others'}",
-        payload: payload,
-        image: _image,
-        context: context);
-
-    print(body);
-    setState(() {
-      isLoading = false;
-    });
-    if (body['hasError']) return;
-
-    //caching the principal details of enrollee
-    state.cartData[state.currentPlanIndex!]['details'] = {
-      ...payload,
-      "image": _image?.path,
-      "orderId": body['data']['orderId'],
-      "orderReference": body['data']['orderReference'],
-    };
-
-    if (state.currentPlanIndex == 0) {
-      Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-              builder: (BuildContext context) => PaymentOption(data: {
-                    "orderReference": body['data']['orderReference'],
-                    "amount": state.getCartTotal() + state.nhisAmount,
-                    "firstName": _firstNameController.text.toString(),
-                    "lastName": _lastNameController.text.toString(),
-                    "email": _emailController.text.toString()
-                  })));
-    } else {
-      Navigator.popUntil(context, ModalRoute.withName("order-summary"));
-      NotificationService.successSheet(context, body['message']);
+      showAlertDialog(
+          context: context,
+          type: AlertType.ERROR,
+          header:
+              "Sorry! ${!Provider.of<MainProvider>(context, listen: false).isLoggedIn ? Provider.of<MainProvider>(context, listen: false).user.firstName : widget.data['firstName']}!",
+          body: "Your payment wasn't successful");
     }
   }
 }
